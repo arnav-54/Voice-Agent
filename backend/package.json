@@ -1,0 +1,23 @@
+{
+  "name": "voice-agent-backend",
+  "version": "1.0.0",
+  "description": "Real-time Voice Agent Backend",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "@deepgram/sdk": "^3.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.1",
+    "express": "^4.18.2",
+    "groq-sdk": "^0.3.2",
+    "mongoose": "^8.1.1",
+    "pino": "^8.19.0",
+    "pino-pretty": "^10.3.1",
+    "socket.io": "^4.7.4",
+    "uuid": "^9.0.1"
+  }
+}
