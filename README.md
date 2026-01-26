@@ -1,60 +1,37 @@
-# Production Voice Agent
+# 🎙️ Nexus Voice - Real-time AI Voice Agent
 
-A real-time, low-latency Voice AI built with React, Node.js, and modern AI streaming APIs.
+A high-performance voice agent built with **React (Vite)**, **Node.js**, **Socket.io**, **Deepgram (STT/TTS)**, and **Groq AI (Brain)**.
 
-## Architecture
+## 🚀 Features
+- **Ultra-low latency**: Real-time streaming using WebSockets and MediaRecorder API.
+- **Background Audio Processing**: Uses `AudioWorklet` (in progress) and buffered streaming for smooth transcription.
+- **Smart Brain**: Powered by Llama-3.1-8b via Groq for instant responses.
+- **Visual Feedback**: Dynamic "Orb" that reacts when you speak or the agent answers.
 
-**Frontend**: React + Vite + WebAudio + Socket.IO Client.
-- Captures raw audio (PCM 16-bit 16kHz).
-- Visualizes state (Listening/Thinking/Speaking).
-- Plays streaming audio responses with queue management and barge-in support.
+## 🛠️ Setup Instructions
 
-**Backend**: Node.js + Express + Socket.IO Server.
-- **Pipeline**:
-  User Audio -> **Custom DSP** (Noise Suppression + VAD) -> **Deepgram STT** (Live) -> **Groq Llama 3** (Intelligence) -> **Tavily** (Search Tools) -> **Deepgram TTS** (Stream) -> Client.
-- **State Management**: Per-socket session isolation.
-- **Persistence**: MongoDB for conversation history.
+### 1. Backend Setup
+1. `cd backend`
+2. `npm install`
+3. Create a `.env` file based on `.env.example` and add your keys:
+   - `GROQ_API_KEY`
+   - `DEEPGRAM_API_KEY`
+   - `MONGODB_URI`
+4. Run the server: `node src/server.js`
 
-## Performance & Optimization
-- **Latency**: Minimized by streaming STT and TTS.
-- **VAD**: Custom Energy-based VAD running on the server (AudioProcessor) to detect turns.
-- **Barge-In**: Interrupts playback immediately when user speaks during assistant turn.
+### 2. Frontend Setup
+1. `cd frontend`
+2. `npm install`
+3. Run the development server: `npm run dev`
 
-## Prerequisites
-- Node.js 18+
-- MongoDB Instance (Atlas Free Tier)
-- API Keys: Deepgram, Groq, Tavily.
+## 💡 Troubleshooting
+If the agent stops hearing you:
+1. **Refresh the browser** to reset the socket connection.
+2. Ensure you see **"Deepgram STT connection established"** in the backend terminal.
+3. Check your microphone permissions in the browser URL bar.
 
-## Setup
-
-1. **Backend**:
-   ```bash
-   cd backend
-   npm install
-   cp .env.example .env
-   # Fill in keys
-   npm run dev
-   ```
-
-2. **Frontend**:
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
-
-## API - Context Update
-You can inspect the `sessionId` in the frontend header or logs.
-```bash
-curl -X POST http://localhost:3000/api/context/update \
-  -H "Content-Type: application/json" \
-  -d '{"sessionId": "YOUR_SESSION_ID", "contextText": "You are now a pirate."}'
-```
-
-## Custom Audio Processing
-The `AudioProcessor` class in `backend/src/audio/processor.js` implements:
-- **Noise Suppression**: Simple spectral gating and smoothing.
-- **VAD**: RMS energy thresholding with state machine for silence detection.
-
-## Multi-User
-Each Socket.IO connection spawns a unique `Session` object with its own audio buffer, STT stream, and conversation history.
+## 📦 Tech Stack
+- **Frontend**: React, Framer Motion, TailwindCSS, Lucide React
+- **Backend**: Node.js, Express, Socket.io
+- **AI Services**: Deepgram (STT/TTS), Groq (LLM)
+- **Database**: MongoDB
