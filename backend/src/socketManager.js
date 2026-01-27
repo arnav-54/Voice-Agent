@@ -5,8 +5,58 @@ import { getLLMResponse } from './services/groq.js';
 import { saveMessage, getSessionHistory } from './db/mongo.js';
 import logger from './utils/logger.js';
 import { v4 as uuidv4 } from 'uuid';
+import { LiveTranscriptionEvents } from '@deepgram/sdk';
 
 const sessions = new Map();
+
+/**
+ * Creates and attaches listeners to a fresh STT stream for a session
+ */
+function initializeStt(session, socket) {
+    if (session.stt) {
+        try { session.stt.finish(); } catch (e) { }
+    }
+
+    const stt = createSttStream();
+    session.stt = stt;
+    session.isSttReady = false;
+
+    stt.on(LiveTranscriptionEvents.Open, () => {
+        logger.info({ sessionId: session.id }, 'Deepgram STT connection established');
+        session.isSttReady = true;
+    });
+
+    stt.on(LiveTranscriptionEvents.Transcript, (data) => {
+        const transcript = data.channel?.alternatives?.[0]?.transcript;
+        if (transcript && transcript.trim().length > 0) {
+            const isFinal = data.is_final;
+            logger.info({ transcript, isFinal, sessionId: session.id }, 'STT Transcript received');
+
+            socket.emit(isFinal ? 'transcript:final' : 'transcript:partial', { text: transcript });
+
+            if (isFinal) {
+                handleUserTurn(socket, session, transcript);
+            }
+        }
+    });
+
+    stt.on(LiveTranscriptionEvents.Metadata, (data) => {
+        // logger.info({ data }, 'Deepgram Metadata received');
+    });
+
+    stt.on(LiveTranscriptionEvents.Error, (err) => {
+        logger.error({ err, sessionId: session.id }, 'Deepgram STT Error');
+        session.isSttReady = false;
+    });
+
+    stt.on(LiveTranscriptionEvents.Close, () => {
+        logger.warn({ sessionId: session.id }, 'Deepgram STT connection closed');
+        session.isSttReady = false;
+        session.stt = null; // Mark as null so it re-initializes on next audio
+    });
+
+    return stt;
+}
 
 export const setupSocketIO = (server) => {
     const io = new Server(server, {
@@ -21,77 +71,45 @@ export const setupSocketIO = (server) => {
         logger.info({ socketId: socket.id, sessionId }, 'Client connected');
         socket.emit('session:init', { sessionId });
 
-        // Session State
         const session = {
             id: sessionId,
             processor: new AudioProcessor(),
             stt: null,
             context: "You are a helpful assistant.",
             isAssistantSpeaking: false,
-            turnBuffer: [],
-            lastActivity: Date.now()
+            isSttReady: false
         };
         sessions.set(sessionId, session);
 
-        // Setup Deepgram Live
-        const stt = createSttStream(socket);
-        session.stt = stt;
+        // Initial STT setup
+        initializeStt(session, socket);
 
-        stt.addListener('transcriptReceived', (packet) => {
-            const data = JSON.parse(packet);
-            const channel = data.channel;
-            const alternatives = channel?.alternatives?.[0];
-
-            if (alternatives && alternatives.transcript) {
-                const text = alternatives.transcript;
-                const isFinal = data.is_final;
-
-                if (text.trim().length > 0) {
-                    socket.emit(isFinal ? 'transcript:final' : 'transcript:partial', { text });
-
-                    if (isFinal) {
-                        handleUserTurn(socket, session, text);
-                    }
-                }
-            }
+        socket.on('ping', () => {
+            socket.emit('pong');
         });
 
-        stt.addListener('error', (err) => {
-            logger.error({ err, sessionId }, 'STT Error');
-        });
-
-        // Socket Events
-        socket.on('audio:chunk', (chunk) => {
-            if (!session.stt) return;
-
-            // 1. Process Audio (VAD + Noise Suppression)
-            const result = session.processor.process(chunk);
-
-            // 2. Metrics
-            // socket.emit('metrics:turn', { vad: result.metrics }); 
-
-            // 3. Barge-in Logic
-            if (result.vadStatus.isSpeech && session.isAssistantSpeaking) {
-                logger.info({ sessionId }, 'Barge-in detected');
-                session.isAssistantSpeaking = false;
-                socket.emit('barge_in', { timestamp: Date.now() });
-                // Need to cancel any pending LLM/TTS actions if possible? 
-                // In this simple architecture, the frontend stops playing. 
-                // We should also stop generating if we were streaming.
+        socket.on('audiochunk', (data) => {
+            // If STT stream was closed (due to inactivity), re-initialize it
+            if (!session.stt) {
+                logger.info({ sessionId }, 'Re-initializing STT stream after inactivity');
+                initializeStt(session, socket);
             }
 
-            // 4. Send to Deepgram (using the cleaned buffer?) 
-            // Deepgram works best with raw audio usually, 
-            // but if we did noise suppression, we send cleaned.
-            if (session.stt.getReadyState() === 1) { // OPEN
-                session.stt.send(result.buffer);
+            if (!session.isSttReady) return;
+
+            // Send to Deepgram
+            try {
+                session.stt.send(Buffer.from(data));
+            } catch (err) {
+                logger.error({ err, sessionId }, 'Error sending audio to Deepgram');
+                session.stt = null; // Trigger re-init on next chunk
             }
         });
 
         socket.on('disconnect', () => {
             logger.info({ sessionId }, 'Client disconnected');
-            if (session.stt) { // Cleanup
-                session.stt.finish();
+            if (session.stt) {
+                try { session.stt.finish(); } catch (e) { }
             }
             sessions.delete(sessionId);
         });
@@ -100,60 +118,39 @@ export const setupSocketIO = (server) => {
     return io;
 };
 
-// Handle Logic
 async function handleUserTurn(socket, session, userText) {
     const sessionId = session.id;
-
-    // Save User Msg
     await saveMessage(sessionId, 'user', userText);
 
-    // Get History
     const history = await getSessionHistory(sessionId);
-    // Format for Groq
     const messages = history.map(m => ({ role: m.role, content: m.content }));
-
-    // Append System/Context
     messages.unshift({ role: 'system', content: session.context });
 
-    // Add current user text if not in history yet (depending on DB timing)
-    // History probably includes it if we awaited saveMessage. 
+    try {
+        const assistantText = await getLLMResponse(messages);
+        socket.emit('assistant:text', { text: assistantText });
+        await saveMessage(sessionId, 'assistant', assistantText);
 
-    // Generate LLM Response
-    const startLLM = Date.now();
-    const assistantText = await getLLMResponse(messages);
-    const llmLatency = Date.now() - startLLM;
+        session.isAssistantSpeaking = true;
+        const audioBuffer = await synthesizeAudio(assistantText);
 
-    socket.emit('assistant:text', { text: assistantText });
-    await saveMessage(sessionId, 'assistant', assistantText);
+        if (audioBuffer && session.isAssistantSpeaking) {
+            socket.emit('assistant:audio', { audio: audioBuffer });
+            session.isAssistantSpeaking = false;
+        }
 
-    // TTS
-    session.isAssistantSpeaking = true;
-    const startTTS = Date.now();
-    const audioBuffer = await synthesizeAudio(assistantText);
-    const ttsLatency = Date.now() - startTTS;
-
-    if (audioBuffer && session.isAssistantSpeaking) {
-        socket.emit('assistant:audio', { audio: audioBuffer, sampleRate: 16000 });
-        session.isAssistantSpeaking = false; // Done sending
+        socket.emit('metrics:turn', {
+            llmLatency: 0, // Simplified for now
+            ttsLatency: 0,
+            e2eLatency: 0
+        });
+    } catch (err) {
+        logger.error({ err, sessionId }, 'Error in handleUserTurn');
+        socket.emit('assistant:text', { text: "I'm having trouble thinking right now." });
     }
-
-    // Metrics
-    socket.emit('metrics:turn', {
-        llmLatency,
-        ttsLatency,
-        e2eLatency: llmLatency + ttsLatency
-    });
 }
 
-// Context Update API Handler
 export const updateContext = (sessionId, contextText) => {
-    // We need to look up the session by ID where ID was generated in socket?
-    // Wait, the User request says "POST /api/context/update with { sessionId, contextText }".
-    // But sessions in `socket.io` are usually ephemeral. 
-    // The `sessionId` needs to be known by the client or persistent.
-    // In this code, I generated a UUID on connection. The client doesn't know it unless I send it.
-    // I should emit 'session:init' with ID.
-
     const session = sessions.get(sessionId);
     if (session) {
         session.context = contextText;
