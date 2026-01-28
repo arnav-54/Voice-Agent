@@ -106,7 +106,7 @@ function App() {
     const { socket, isConnected, messages, metrics, sessionId } = useSocket();
     const { isRecording, startRecording, stopRecording } = useAudioRecorder(socket);
     const { isPlaying: isSpeaking } = useAudioPlayer(socket);
-    const [showMetrics, setShowMetrics] = useState(true);
+    const [showMetrics, setShowMetrics] = useState(false);
 
     const bottomRef = useRef(null);
 
@@ -128,23 +128,24 @@ function App() {
             </div>
 
             {/* Header */}
-            <header className="p-6 flex justify-between items-center z-50 relative">
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gradient-to-tr from-purple-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/20">
-                        <Zap size={16} className="text-white" fill="currentColor" />
+            <header className="p-4 md:p-6 flex justify-between items-center z-50 relative">
+                <div className="flex items-center gap-2 md:gap-3">
+                    <div className="w-7 h-7 md:w-8 md:h-8 bg-gradient-to-tr from-purple-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/20">
+                        <Zap size={14} className="text-white md:hidden" fill="currentColor" />
+                        <Zap size={16} className="text-white hidden md:block" fill="currentColor" />
                     </div>
-                    <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+                    <h1 className="text-lg md:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
                         Vaani
                     </h1>
                 </div>
-                <div className="flex items-center gap-4 text-xs font-mono">
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/5 backdrop-blur-md">
-                        <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-red-500 animate-pulse'}`} />
+                <div className="flex items-center gap-2 md:gap-4 text-[10px] md:text-xs font-mono">
+                    <div className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-3 py-1 md:py-1.5 rounded-full bg-white/5 border border-white/5 backdrop-blur-md">
+                        <div className={`h-1.5 w-1.5 md:h-2 md:w-2 rounded-full ${isConnected ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-red-500 animate-pulse'}`} />
                         <span className="text-slate-400">{isConnected ? 'ONLINE' : 'OFFLINE'}</span>
                     </div>
                     <button
                         onClick={() => setShowMetrics(!showMetrics)}
-                        className={`p-2 rounded-full transition-colors ${showMetrics ? 'bg-white/10 text-white' : 'text-slate-600 hover:text-slate-300'}`}
+                        className={`p-1.5 md:p-2 rounded-full transition-colors ${showMetrics ? 'bg-white/10 text-white' : 'text-slate-600 hover:text-slate-300'}`}
                     >
                         <Activity size={18} />
                     </button>
@@ -152,47 +153,57 @@ function App() {
             </header>
 
             {/* Main Content */}
-            <main className="flex-1 flex flex-col items-center justify-center relative z-10 p-4">
+            <main className="flex-1 flex flex-col items-center justify-center relative z-10 p-4 md:p-6">
 
                 {/* Orb Container */}
-                <div className="mb-12 scale-125">
+                <div className="mb-8 md:mb-12 scale-100 md:scale-125 transition-transform duration-500">
                     <Orb state={visualState} />
                 </div>
 
                 {/* Transcripts (Subtitle Style) */}
-                <div className="w-full max-w-2xl h-[30vh] overflow-y-auto mb-8 mask-fade-top scrollbar-hide space-y-4 px-4">
+                <div className="w-full max-w-2xl h-[35vh] md:h-[30vh] overflow-y-auto mb-6 md:mb-8 mask-fade-top scrollbar-hide space-y-4 px-2 md:px-4">
                     <AnimatePresence initial={false}>
-                        {messages.map((m, i) => (
+                        {messages.length === 0 ? (
                             <motion.div
-                                key={i}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="text-center py-10"
                             >
-                                <div className={`
-                            max-w-[80%] p-4 rounded-2xl backdrop-blur-sm 
-                            ${m.role === 'user'
-                                        ? 'bg-white/5 border border-white/10 text-right'
-                                        : 'bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-white/5'}
-                         `}>
-                                    <p className={`text-lg font-light leading-relaxed ${m.isPartial ? 'opacity-60' : 'opacity-90'}`}>
-                                        {m.content}
-                                    </p>
-                                </div>
+                                <p className="text-slate-500 font-light text-sm italic">"Try asking: What's the latest tech news?"</p>
                             </motion.div>
-                        ))}
+                        ) : (
+                            messages.map((m, i) => (
+                                <motion.div
+                                    key={i}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                >
+                                    <div className={`
+                                max-w-[85%] md:max-w-[80%] p-3 md:p-4 rounded-xl md:rounded-2xl backdrop-blur-sm 
+                                ${m.role === 'user'
+                                            ? 'bg-white/5 border border-white/10 text-right'
+                                            : 'bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-white/5'}
+                             `}>
+                                        <p className={`text-base md:text-lg font-light leading-relaxed ${m.isPartial ? 'opacity-60' : 'opacity-90'}`}>
+                                            {m.content}
+                                        </p>
+                                    </div>
+                                </motion.div>
+                            ))
+                        )}
                     </AnimatePresence>
                     <div ref={bottomRef} />
                 </div>
 
                 {/* Hint Text */}
-                <div className="h-6 mb-8 text-center">
+                <div className="h-6 mb-6 md:mb-8 text-center px-4">
                     <AnimatePresence mode="wait">
                         {visualState === 'listening' ? (
                             <motion.p
                                 key="listening"
                                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                className="text-emerald-400/80 text-sm font-light tracking-widest uppercase"
+                                className="text-emerald-400/80 text-xs md:text-sm font-light tracking-widest uppercase"
                             >
                                 Listening...
                             </motion.p>
@@ -200,7 +211,7 @@ function App() {
                             <motion.p
                                 key="speaking"
                                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                className="text-purple-400/80 text-sm font-light tracking-widest uppercase"
+                                className="text-purple-400/80 text-xs md:text-sm font-light tracking-widest uppercase"
                             >
                                 Answering...
                             </motion.p>
@@ -208,93 +219,117 @@ function App() {
                             <motion.p
                                 key="idle"
                                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                className="text-slate-500 text-sm font-light"
+                                className="text-slate-500 text-xs md:text-sm font-light"
                             >
-                                Tap the microphone to speak
+                                Tap the button to start talking
                             </motion.p>
                         )}
                     </AnimatePresence>
                 </div>
 
                 {/* Main Control */}
-                <button
-                    onClick={isRecording ? stopRecording : startRecording}
-                    className={`
-                group relative px-8 py-4 rounded-full flex items-center gap-4 transition-all duration-300
-                ${isRecording
-                            ? 'bg-red-500/10 text-red-500 border border-red-500/50 hover:bg-red-500/20 px-10'
-                            : 'bg-white text-black hover:scale-105 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]'}
-             `}
-                >
-                    {isRecording ? (
-                        <>
-                            <span className="relative flex h-3 w-3">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                            </span>
-                            <span className="font-bold tracking-wide">STOP SESSION</span>
-                        </>
-                    ) : (
-                        <>
-                            <Mic className="group-hover:scale-110 transition-transform" />
-                            <span className="font-bold tracking-wide">START CONVERSATION</span>
-                        </>
-                    )}
-                </button>
+                <div className="w-full max-w-xs md:max-w-none flex justify-center pb-8 md:pb-0">
+                    <button
+                        onClick={isRecording ? stopRecording : startRecording}
+                        className={`
+                    group relative w-full md:w-auto px-6 md:px-10 py-4 md:py-4 rounded-2xl md:rounded-full flex items-center justify-center gap-4 transition-all duration-300
+                    ${isRecording
+                                ? 'bg-red-500/10 text-red-500 border border-red-500/50 hover:bg-red-500/20'
+                                : 'bg-white text-black hover:scale-105 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]'}
+                 `}
+                    >
+                        {isRecording ? (
+                            <>
+                                <span className="relative flex h-2.5 w-2.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                                </span>
+                                <span className="font-bold tracking-wide text-sm md:text-base">STOP SESSION</span>
+                            </>
+                        ) : (
+                            <>
+                                <Mic size={20} className="group-hover:scale-110 transition-transform" />
+                                <span className="font-bold tracking-wide text-sm md:text-base">START CONVERSATION</span>
+                            </>
+                        )}
+                    </button>
+                </div>
 
             </main>
 
             {/* Metrics Overlay (Floating Panel) */}
             <AnimatePresence>
                 {showMetrics && (
-                    <motion.div
-                        initial={{ x: '100%' }}
-                        animate={{ x: 0 }}
-                        exit={{ x: '100%' }}
-                        className="absolute right-0 top-20 bottom-0 w-80 bg-black/40 backdrop-blur-xl border-l border-white/5 p-6 z-40"
-                    >
-                        <div className="flex items-center gap-2 mb-6 text-slate-400 text-xs font-bold tracking-wider uppercase">
-                            <Activity size={14} /> System Performance
-                        </div>
-
-                        <div className="space-y-4">
-                            {metrics.slice().reverse().map((m, i) => (
-                                <div key={i} className="p-4 rounded-lg bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <span className="text-xs font-mono text-slate-500">TURN #{metrics.length - i}</span>
-                                        <span className="text-[10px] text-slate-600 font-mono">{new Date(m.timestamp).toLocaleTimeString()}</span>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div className="p-2 rounded bg-black/20">
-                                            <div className="flex items-center gap-1.5 text-slate-500 text-[10px] mb-1">
-                                                <Cpu size={10} /> LLM
-                                            </div>
-                                            <div className="text-emerald-400 font-mono text-sm">{m.llmLatency}ms</div>
-                                        </div>
-                                        <div className="p-2 rounded bg-black/20">
-                                            <div className="flex items-center gap-1.5 text-slate-500 text-[10px] mb-1">
-                                                <MessageSquare size={10} /> TTS
-                                            </div>
-                                            <div className="text-blue-400 font-mono text-sm">{m.ttsLatency}ms</div>
-                                        </div>
-                                    </div>
-
-                                    <div className="mt-2 pt-2 border-t border-white/5 flex justify-between items-center">
-                                        <span className="text-[10px] text-slate-500 flex items-center gap-1">
-                                            <Clock size={10} /> LATENCY
-                                        </span>
-                                        <span className="text-purple-400 font-bold font-mono text-sm">{m.e2eLatency}ms</span>
-                                    </div>
+                    <>
+                        {/* Mobile Backdrop */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowMetrics(false)}
+                            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+                        />
+                        <motion.div
+                            initial={{ x: '100%' }}
+                            animate={{ x: 0 }}
+                            exit={{ x: '100%' }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                            className="fixed right-0 top-0 bottom-0 w-full xs:w-80 md:w-80 bg-black/80 md:bg-black/40 backdrop-blur-2xl border-l border-white/5 p-6 z-50 overflow-y-auto"
+                        >
+                            <div className="flex items-center justify-between mb-8 md:mb-6">
+                                <div className="flex items-center gap-2 text-slate-400 text-xs font-bold tracking-wider uppercase">
+                                    <Activity size={14} /> System Metrics
                                 </div>
-                            ))}
-                            {metrics.length === 0 && (
-                                <div className="text-center py-10 text-slate-700 text-sm">
-                                    Ready to measure...
-                                </div>
-                            )}
-                        </div>
-                    </motion.div>
+                                <button
+                                    onClick={() => setShowMetrics(false)}
+                                    className="p-2 hover:bg-white/5 rounded-full transition-colors"
+                                >
+                                    <span className="text-slate-400 text-lg">&times;</span>
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                {metrics.slice().reverse().map((m, i) => (
+                                    <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-all">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <span className="text-[10px] font-mono text-slate-500 font-bold">TURN #{metrics.length - i}</span>
+                                            <span className="text-[10px] text-slate-600 font-mono">{new Date(m.timestamp).toLocaleTimeString()}</span>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="p-2.5 rounded-lg bg-black/40">
+                                                <div className="flex items-center gap-1.5 text-slate-500 text-[9px] mb-1 font-bold uppercase tracking-tighter">
+                                                    <Cpu size={10} /> LLM
+                                                </div>
+                                                <div className="text-emerald-400 font-mono text-sm">{m.llmLatency}ms</div>
+                                            </div>
+                                            <div className="p-2.5 rounded-lg bg-black/40">
+                                                <div className="flex items-center gap-1.5 text-slate-500 text-[9px] mb-1 font-bold uppercase tracking-tighter">
+                                                    <MessageSquare size={10} /> TTS
+                                                </div>
+                                                <div className="text-blue-400 font-mono text-sm">{m.ttsLatency}ms</div>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-2.5 pt-2.5 border-t border-white/5 flex justify-between items-center">
+                                            <span className="text-[10px] text-slate-500 flex items-center gap-1 font-bold">
+                                                <Clock size={10} /> E2E LATENCY
+                                            </span>
+                                            <span className="text-purple-400 font-bold font-mono text-sm">{m.e2eLatency}ms</span>
+                                        </div>
+                                    </div>
+                                ))}
+                                {metrics.length === 0 && (
+                                    <div className="text-center py-20 text-slate-700 text-sm">
+                                        <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 opacity-50">
+                                            <Activity size={24} />
+                                        </div>
+                                        Waiting for performance data...
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    </>
                 )}
             </AnimatePresence>
         </div>
