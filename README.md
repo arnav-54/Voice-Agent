@@ -30,8 +30,21 @@ If the agent stops hearing you:
 2. Ensure you see **"Deepgram STT connection established"** in the backend terminal.
 3. Check your microphone permissions in the browser URL bar.
 
+## 🌍 Deployment
+
+This project is optimized for deployment using **Render** (Backend) and **Vercel** (Frontend).
+
+For detailed step-by-step instructions, please refer to our **[Deployment Guide](./docs/DEPLOYMENT.md)**.
+
+### Quick Links
+- **Backend (Render)**: Set the root directory to `backend`.
+- **Frontend (Vercel)**: Set the root directory to `frontend`.
+
+---
+
 ## 📦 Tech Stack
 - **Frontend**: React, Framer Motion, TailwindCSS, Lucide React
 - **Backend**: Node.js, Express, Socket.io
 - **AI Services**: Deepgram (STT/TTS), Groq (LLM)
-- **Database**: MongoDB
+- **Database**: MongoDB (Atlas)
+- **Deployment**: Render (API), Vercel (Frontend)
