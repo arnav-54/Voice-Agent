@@ -96,5 +96,5 @@ The system operates as a real-time cascade pipeline:
 
 ## 🌍 Deployment
 
-This project is optimized for deployment using **Render** (Backend) and **Vercel** (Frontend).
+This project is optimized for deployment using **Render** (Backend) and **Render** (Frontend).
 Detailed instructions are in the **[Deployment Guide](./docs/DEPLOYMENT.md)**.
