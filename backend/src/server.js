@@ -17,6 +17,9 @@ app.use(express.json());
 
 connectDB();
 
+app.get('/', (req, res) => {
+    res.send('🎙️ Vaani Backend is Running!');
+});
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
