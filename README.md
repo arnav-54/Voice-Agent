@@ -1,4 +1,4 @@
-# 🎙️ Nexus Voice - Real-time AI Voice Agent
+# 🎙️ Vaani - Real-time AI Voice Agent
 
 A high-performance voice agent built with **React (Vite)**, **Node.js**, **Socket.io**, **Deepgram (STT/TTS)**, and **Groq AI (Brain)**.
 
