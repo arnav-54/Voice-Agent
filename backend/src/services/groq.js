@@ -10,15 +10,25 @@ export const initGroq = () => {
     }
 };
 
-// System prompt for the voice agent
+
 const SYSTEM_PROMPT = `You are a helpful, fast, and real-time voice assistant. 
 Your answers should be concise and conversational. 
-If you need external information, call the 'search_web' tool. 
+If you need current or external information, use the 'search_web' tool IMMEDIATELY. 
+DO NOT ask for permission to search and DO NOT tell the user you are about to search. Just provide the answer using the tool results.
 Always speak in a way that is easy to listen to (avoid markdown tables or long lists).`;
 
-export const getLLMResponse = async (messages, onDelta) => {
+const responseCache = new Map();
+
+export const getLLMResponse = async (messages, signal) => {
     if (!groq) initGroq();
     if (!groq) throw new Error("Groq not initialized");
+
+
+    const lastUserMessage = messages[messages.length - 1]?.content;
+    if (lastUserMessage && responseCache.has(lastUserMessage)) {
+        logger.info({ query: lastUserMessage }, 'Cache hit for LLM response');
+        return responseCache.get(lastUserMessage);
+    }
 
     const tools = [
         {
@@ -43,15 +53,15 @@ export const getLLMResponse = async (messages, onDelta) => {
                 { role: 'system', content: SYSTEM_PROMPT },
                 ...messages
             ],
-            model: "llama-3.1-8b-instant", // Fast model
+            model: "llama-3.1-8b-instant",
             tools,
             tool_choice: "auto",
             max_tokens: 1024,
-        });
+        }, { signal });
 
         const msg = completion.choices[0].message;
 
-        // Handle tool calls
+
         if (msg.tool_calls) {
             const toolCall = msg.tool_calls[0];
             if (toolCall.function.name === 'search_web') {
@@ -59,7 +69,7 @@ export const getLLMResponse = async (messages, onDelta) => {
                 logger.info({ query: args.query }, 'Executing Web Search');
                 const searchResult = await searchWeb(args.query);
 
-                // Add tool result to messages
+
                 const newMessages = [
                     ...messages,
                     msg,
@@ -70,32 +80,42 @@ export const getLLMResponse = async (messages, onDelta) => {
                     }
                 ];
 
-                // Recursively call for final answer
-                return await getLLMResponse(newMessages, onDelta);
+
+                return await getLLMResponse(newMessages, signal);
             }
         }
 
-        // If no tool call, just return the text (handle streaming if we want, but for simplicity we return text and let TTS stream it. 
-        // User asked for "Stream AI Audio to user". 
-        // Best latency flow: LLM Stream -> TTS Stream.
-        // Groq SDK supports streaming. Let's rewrite for streaming.
 
+        if (lastUserMessage && msg.content) {
+            responseCache.set(lastUserMessage, msg.content);
+        }
         return msg.content;
     } catch (error) {
-        logger.error({ err: error }, 'Groq API Error');
-        return "I'm having trouble thinking right now.";
+        if (error.name === 'AbortError') {
+            logger.info('Groq request aborted');
+            return "";
+        }
+
+
+        logger.warn({ err: error }, 'Groq Primary model failed, attempting fallback to Llama 8b...');
+        try {
+            const fallback = await groq.chat.completions.create({
+                messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
+                model: "llama3-8b-8192",
+                max_tokens: 512,
+            }, { signal });
+            return fallback.choices[0].message.content;
+        } catch (fallbackError) {
+            logger.error({ err: fallbackError }, 'Groq Fallback also failed');
+            return "I'm having trouble thinking right now.";
+        }
     }
 };
 
 export const streamLLMResponse = async (messages, onToken) => {
     if (!groq) initGroq();
 
-    // Simplification for the "streaming" requirement: 
-    // We will assume no tools for the *streaming* path to keep it simple, 
-    // OR we do a first pass non-stream to check for tools?
-    // Actually, to get lowest latency, we should stream. 
-    // But tools complicate streaming (need to acccumulate args).
-    // Strategy: Stream. If we detect tool call, we buffer. If content, we yield tokens.
+
 
     try {
         const stream = await groq.chat.completions.create({
@@ -103,7 +123,7 @@ export const streamLLMResponse = async (messages, onToken) => {
                 { role: 'system', content: SYSTEM_PROMPT },
                 ...messages
             ],
-            model: "llama3-70b-8192", // Powerful enough
+            model: "llama3-70b-8192",
             stream: true,
         });
 

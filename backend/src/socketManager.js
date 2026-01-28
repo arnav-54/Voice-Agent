@@ -3,15 +3,16 @@ import { AudioProcessor } from './audio/processor.js';
 import { createSttStream, synthesizeAudio } from './services/deepgram.js';
 import { getLLMResponse } from './services/groq.js';
 import { saveMessage, getSessionHistory } from './db/mongo.js';
+import { analyzeAudioQuality } from './services/analysis.js';
+import { turnPerformance } from './utils/performance.js';
+import { config } from './config.js';
 import logger from './utils/logger.js';
 import { v4 as uuidv4 } from 'uuid';
 import { LiveTranscriptionEvents } from '@deepgram/sdk';
 
 const sessions = new Map();
 
-/**
- * Creates and attaches listeners to a fresh STT stream for a session
- */
+
 function initializeStt(session, socket) {
     if (session.stt) {
         try { session.stt.finish(); } catch (e) { }
@@ -32,6 +33,18 @@ function initializeStt(session, socket) {
             const isFinal = data.is_final;
             logger.info({ transcript, isFinal, sessionId: session.id }, 'STT Transcript received');
 
+
+            if (session.isAssistantSpeaking && transcript.trim().length > 2) {
+                logger.info({ sessionId: session.id, transcript }, 'Barge-in detected');
+                session.currentTurnId++;
+                session.isAssistantSpeaking = false;
+
+                session.abortController.abort();
+                session.abortController = new AbortController();
+
+                socket.emit('barge_in');
+            }
+
             socket.emit(isFinal ? 'transcript:final' : 'transcript:partial', { text: transcript });
 
             if (isFinal) {
@@ -41,7 +54,7 @@ function initializeStt(session, socket) {
     });
 
     stt.on(LiveTranscriptionEvents.Metadata, (data) => {
-        // logger.info({ data }, 'Deepgram Metadata received');
+
     });
 
     stt.on(LiveTranscriptionEvents.Error, (err) => {
@@ -52,7 +65,7 @@ function initializeStt(session, socket) {
     stt.on(LiveTranscriptionEvents.Close, () => {
         logger.warn({ sessionId: session.id }, 'Deepgram STT connection closed');
         session.isSttReady = false;
-        session.stt = null; // Mark as null so it re-initializes on next audio
+        session.stt = null;
     });
 
     return stt;
@@ -77,11 +90,14 @@ export const setupSocketIO = (server) => {
             stt: null,
             context: "You are a helpful assistant.",
             isAssistantSpeaking: false,
-            isSttReady: false
+            isSttReady: false,
+            currentTurnId: 0,
+            isRecording: true,
+            abortController: new AbortController()
         };
         sessions.set(sessionId, session);
 
-        // Initial STT setup
+
         initializeStt(session, socket);
 
         socket.on('ping', () => {
@@ -89,21 +105,56 @@ export const setupSocketIO = (server) => {
         });
 
         socket.on('audiochunk', (data) => {
-            // If STT stream was closed (due to inactivity), re-initialize it
+
             if (!session.stt) {
-                logger.info({ sessionId }, 'Re-initializing STT stream after inactivity');
                 initializeStt(session, socket);
             }
 
             if (!session.isSttReady) return;
 
-            // Send to Deepgram
+
+            const { buffer, vadStatus } = session.processor.process(Buffer.from(data));
+
+            // Observability: Audio Quality Metrics
+            const quality = analyzeAudioQuality(buffer);
+            if (quality && Math.random() < 0.05) {
+                socket.emit('metrics:audio', quality);
+            }
+
+            if (vadStatus.event === 'speech_start') {
+                logger.info({ sessionId }, 'VAD: Speech Started');
+            }
+
+
             try {
-                session.stt.send(Buffer.from(data));
+                session.stt.send(buffer);
             } catch (err) {
                 logger.error({ err, sessionId }, 'Error sending audio to Deepgram');
-                session.stt = null; // Trigger re-init on next chunk
+                session.stt = null;
             }
+        });
+
+        socket.on('session:start', () => {
+            logger.info({ sessionId }, 'Session start requested');
+            session.isRecording = true;
+        });
+
+        socket.on('session:stop', () => {
+            logger.info({ sessionId }, 'Session stop requested');
+            session.isRecording = false;
+            session.currentTurnId++;
+            session.isAssistantSpeaking = false;
+
+
+            session.abortController.abort();
+            session.abortController = new AbortController();
+
+            socket.emit('barge_in');
+        });
+
+        socket.on('context:update', ({ context }) => {
+            logger.info({ sessionId, context }, 'Context updated via socket');
+            session.context = context;
         });
 
         socket.on('disconnect', () => {
@@ -119,7 +170,17 @@ export const setupSocketIO = (server) => {
 };
 
 async function handleUserTurn(socket, session, userText) {
+    const startTime = Date.now();
+
+
+    session.isAssistantSpeaking = false;
+
+    if (!session.isRecording && session.messagesCount > 0) return;
+    session.messagesCount = (session.messagesCount || 0) + 1;
+
     const sessionId = session.id;
+    const turnId = ++session.currentTurnId;
+
     await saveMessage(sessionId, 'user', userText);
 
     const history = await getSessionHistory(sessionId);
@@ -127,26 +188,49 @@ async function handleUserTurn(socket, session, userText) {
     messages.unshift({ role: 'system', content: session.context });
 
     try {
-        const assistantText = await getLLMResponse(messages);
+        const llmStart = Date.now();
+        const assistantText = await getLLMResponse(messages, session.abortController.signal);
+        const llmLatency = Date.now() - llmStart;
+
+
+        if (session.currentTurnId !== turnId) return;
+
+
+        session.isAssistantSpeaking = true;
+
         socket.emit('assistant:text', { text: assistantText });
         await saveMessage(sessionId, 'assistant', assistantText);
 
-        session.isAssistantSpeaking = true;
+        const ttsStart = Date.now();
         const audioBuffer = await synthesizeAudio(assistantText);
+        const ttsLatency = Date.now() - ttsStart;
+
+
+        if (session.currentTurnId !== turnId) {
+            session.isAssistantSpeaking = false;
+            return;
+        }
 
         if (audioBuffer && session.isAssistantSpeaking) {
             socket.emit('assistant:audio', { audio: audioBuffer });
+        } else {
             session.isAssistantSpeaking = false;
         }
 
+        const totalLatency = Date.now() - startTime;
         socket.emit('metrics:turn', {
-            llmLatency: 0, // Simplified for now
-            ttsLatency: 0,
-            e2eLatency: 0
+            llmLatency,
+            ttsLatency,
+            e2eLatency: totalLatency,
+            timestamp: new Date().toISOString()
         });
     } catch (err) {
+        if (err.name === 'AbortError') return;
         logger.error({ err, sessionId }, 'Error in handleUserTurn');
-        socket.emit('assistant:text', { text: "I'm having trouble thinking right now." });
+        session.isAssistantSpeaking = false;
+        if (session.currentTurnId === turnId) {
+            socket.emit('assistant:text', { text: "I'm having trouble thinking right now." });
+        }
     }
 }
 

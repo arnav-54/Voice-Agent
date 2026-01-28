@@ -11,14 +11,13 @@ dotenv.config();
 const app = express();
 const server = createServer(app);
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Database
+
 connectDB();
 
-// API Endpoints
+
 app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
 });
@@ -39,7 +38,7 @@ app.post('/api/context/update', (req, res) => {
     }
 });
 
-// Setup Socket.IO
+
 setupSocketIO(server);
 
 const PORT = process.env.PORT || 3000;

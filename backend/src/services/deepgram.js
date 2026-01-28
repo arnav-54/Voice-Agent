@@ -16,7 +16,9 @@ export const createSttStream = () => {
         model: "nova-2",
         language: "en-US",
         smart_format: true,
-        // Remove fixed linear16 to let Deepgram detect Opus/WebM
+        encoding: "linear16",
+        sample_rate: 16000,
+        channels: 1,
         interim_results: true,
         endpointing: 300,
         utterance_end_ms: 1000
