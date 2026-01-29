@@ -79,10 +79,19 @@ export const setupSocketIO = (server) => {
         }
     });
 
-    io.on('connection', (socket) => {
-        const sessionId = uuidv4();
-        logger.info({ socketId: socket.id, sessionId }, 'Client connected');
-        socket.emit('session:init', { sessionId });
+    io.on('connection', async (socket) => {
+        let sessionId = socket.handshake.query?.sessionId;
+        let history = [];
+
+        if (sessionId && sessionId !== 'undefined' && sessionId !== 'null') {
+            logger.info({ sessionId }, 'Client attempting to resume session');
+            history = await getSessionHistory(sessionId);
+        } else {
+            sessionId = uuidv4();
+            logger.info({ socketId: socket.id, sessionId }, 'New client connected');
+        }
+
+        socket.emit('session:init', { sessionId, history });
 
         const session = {
             id: sessionId,
@@ -96,7 +105,6 @@ export const setupSocketIO = (server) => {
             abortController: new AbortController()
         };
         sessions.set(sessionId, session);
-
 
         initializeStt(session, socket);
 

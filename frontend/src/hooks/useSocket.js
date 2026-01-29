@@ -11,11 +11,14 @@ export const useSocket = () => {
 
     useEffect(() => {
         const url = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
-        const s = io(url);
+        const storedSessionId = localStorage.getItem('voice_agent_session_id');
+
+        const s = io(url, {
+            query: { sessionId: storedSessionId }
+        });
 
         s.on('connect', () => {
             setIsConnected(true);
-            // Clear existing interval to prevent overlapping timers
             if (intervalRef.current) clearInterval(intervalRef.current);
             intervalRef.current = setInterval(() => {
                 s.emit('ping');
@@ -30,9 +33,17 @@ export const useSocket = () => {
             }
         });
 
-        s.on('session:init', ({ sessionId }) => {
+        s.on('session:init', ({ sessionId, history }) => {
             setSessionId(sessionId);
-            console.log('Session ID:', sessionId);
+            localStorage.setItem('voice_agent_session_id', sessionId);
+            if (history && history.length > 0) {
+                setMessages(history.map(m => ({
+                    role: m.role,
+                    content: m.content,
+                    isPartial: false
+                })));
+            }
+            console.log('Session initialized:', sessionId, 'History size:', history?.length || 0);
         });
 
         s.on('transcript:partial', ({ text }) => {
