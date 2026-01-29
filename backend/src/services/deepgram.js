@@ -1,5 +1,6 @@
 import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 import logger from '../utils/logger.js';
+import { config } from '../config.js';
 
 let deepgram = null;
 
@@ -20,9 +21,10 @@ export const createSttStream = () => {
         sample_rate: 16000,
         channels: 1,
         interim_results: true,
-        endpointing: 300,
-        utterance_end_ms: 1000
+        endpointing: config.vad.endpointing,
+        utterance_end_ms: config.vad.utterance_end_ms
     });
+
 
     return live;
 };

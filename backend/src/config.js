@@ -10,9 +10,12 @@ export const config = {
     frontend_origin: process.env.FRONTEND_ORIGIN || "*",
     vad: {
         threshold: 0.001,
-        silence_duration: 1000,
-        min_speech_duration: 50
+        silence_duration: 1500,
+        min_speech_duration: 50,
+        endpointing: 1500,
+        utterance_end_ms: 1500
     },
+
     audio: {
         sample_rate: 16000,
         channels: 1,

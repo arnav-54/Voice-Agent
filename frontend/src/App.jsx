@@ -18,7 +18,7 @@ const Orb = ({ state }) => {
                     opacity: isSpeaking ? 0.8 : 0.3
                 }}
                 transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                className={`absolute inset-0 rounded-full blur-3xl ${isSpeaking ? 'bg-purple-600' : isListening ? 'bg-emerald-500' : 'bg-blue-600'
+                className={`absolute inset-0 rounded-full blur-2xl md:blur-3xl transform-gpu ${isSpeaking ? 'bg-purple-600' : isListening ? 'bg-emerald-500' : 'bg-blue-600'
                     }`}
             />
 
@@ -28,12 +28,13 @@ const Orb = ({ state }) => {
                     scale: isSpeaking ? [1, 1.05, 1] : 1,
                 }}
                 transition={{ duration: 0.5, repeat: Infinity }}
-                className={`relative z-10 w-40 h-40 rounded-full shadow-2xl backdrop-blur-md border border-white/10 flex items-center justify-center overflow-hidden
+                className={`relative z-10 w-40 h-40 rounded-full shadow-2xl backdrop-blur-md border border-white/10 flex items-center justify-center overflow-hidden transform-gpu
           ${isSpeaking ? 'bg-gradient-to-br from-purple-500 to-indigo-600' :
                         isListening ? 'bg-gradient-to-br from-emerald-400 to-teal-600' :
                             'bg-gradient-to-br from-slate-700 to-slate-900'}
         `}
             >
+
                 {state === 'idle' && <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20" />}
 
                 <AnimatePresence mode="wait">
@@ -114,6 +115,12 @@ function App() {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
+    // Fast wake-up for Render deployment
+    useEffect(() => {
+        const url = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+        fetch(`${url}/health`).catch(() => { }); // Silent ping to wake up Render
+    }, []);
+
     let visualState = 'idle';
     if (isSpeaking) visualState = 'speaking';
     else if (isRecording) visualState = 'listening';
@@ -121,16 +128,41 @@ function App() {
     return (
         <div className="min-h-screen bg-[#0A0A0B] text-slate-100 font-sans selection:bg-purple-500/30 overflow-hidden flex flex-col relative">
 
+            {/* Initialization Overlay */}
+            <AnimatePresence>
+                {!isConnected && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] bg-[#0A0A0B] flex flex-col items-center justify-center gap-6"
+                    >
+                        <div className="relative">
+                            <motion.div
+                                animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
+                                transition={{ duration: 2, repeat: Infinity }}
+                                className="w-32 h-32 bg-purple-600 rounded-full blur-3xl absolute -inset-4"
+                            />
+                            <Zap size={48} className="text-white relative z-10 animate-pulse text-purple-400" fill="currentColor" />
+                        </div>
+                        <div className="text-center space-y-2">
+                            <h2 className="text-xl font-bold tracking-widest uppercase">Initializing Core</h2>
+                            <p className="text-slate-500 font-mono text-xs animate-pulse">Establishing secure neural link...</p>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Background Ambience */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-900/10 rounded-full blur-[120px]" />
-                <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-900/10 rounded-full blur-[120px]" />
+                <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-900/10 rounded-full blur-[60px] md:blur-[120px] transform-gpu" />
+                <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-900/10 rounded-full blur-[60px] md:blur-[120px] transform-gpu" />
             </div>
 
             {/* Header */}
             <header className="p-4 md:p-6 flex justify-between items-center z-50 relative">
                 <div className="flex items-center gap-2 md:gap-3">
-                    <div className="w-7 h-7 md:w-8 md:h-8 bg-gradient-to-tr from-purple-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/20">
+                    <div className="w-7 h-7 md:w-8 md:h-8 bg-gradient-to-tr from-purple-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/10">
                         <Zap size={14} className="text-white md:hidden" fill="currentColor" />
                         <Zap size={16} className="text-white hidden md:block" fill="currentColor" />
                     </div>
@@ -138,6 +170,7 @@ function App() {
                         Vaani
                     </h1>
                 </div>
+
                 <div className="flex items-center gap-2 md:gap-4 text-[10px] md:text-xs font-mono">
                     <button
                         onClick={clearMessages}

@@ -1,9 +1,6 @@
 import logger from '../utils/logger.js';
+import { config } from '../config.js';
 
-
-const VAD_THRESHOLD = 0.001;
-const SILENCE_DURATION_MS = 1000;
-const MIN_SPEECH_DURATION_MS = 50;
 
 export class AudioProcessor {
     constructor() {
@@ -11,6 +8,10 @@ export class AudioProcessor {
         this.isSpeaking = false;
         this.silenceStart = null;
         this.speechStart = null;
+
+        this.vadThreshold = config.vad.threshold;
+        this.silenceDurationMs = config.vad.silence_duration;
+        this.minSpeechDurationMs = config.vad.min_speech_duration;
 
         this.prevSample = 0;
     }
@@ -78,11 +79,11 @@ export class AudioProcessor {
         const now = Date.now();
         let vadStatus = { isSpeech: false, event: null };
 
-        if (rms > VAD_THRESHOLD) {
+        if (rms > this.vadThreshold) {
             if (!this.isSpeaking) {
                 if (!this.speechStart) {
                     this.speechStart = now;
-                } else if (now - this.speechStart > MIN_SPEECH_DURATION_MS) {
+                } else if (now - this.speechStart > this.minSpeechDurationMs) {
                     this.isSpeaking = true;
                     vadStatus = { isSpeech: true, event: 'speech_start' };
                     this.silenceStart = null;
@@ -95,7 +96,7 @@ export class AudioProcessor {
             if (this.isSpeaking) {
                 if (!this.silenceStart) {
                     this.silenceStart = now;
-                } else if (now - this.silenceStart > SILENCE_DURATION_MS) {
+                } else if (now - this.silenceStart > this.silenceDurationMs) {
                     this.isSpeaking = false;
                     vadStatus = { isSpeech: false, event: 'speech_end' };
                     this.speechStart = null;
@@ -104,6 +105,7 @@ export class AudioProcessor {
                 this.speechStart = null;
             }
         }
+
 
         return {
             buffer: cleanedBuffer,

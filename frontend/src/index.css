@@ -9,8 +9,10 @@ body {
 
 @layer utilities {
     .mask-fade-top {
+        -webkit-mask-image: linear-gradient(to bottom, transparent, black 10%);
         mask-image: linear-gradient(to bottom, transparent, black 10%);
     }
+
 
     .scrollbar-hide::-webkit-scrollbar {
         display: none;
