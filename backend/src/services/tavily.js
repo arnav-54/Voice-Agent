@@ -16,7 +16,7 @@ export const searchWeb = async (query) => {
             body: JSON.stringify({
                 api_key: apiKey,
                 query: query,
-                search_depth: 'basic',
+                search_depth: 'advanced',
                 include_answer: true,
                 max_results: 3
             })

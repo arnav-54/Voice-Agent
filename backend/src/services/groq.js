@@ -12,11 +12,16 @@ export const initGroq = () => {
 };
 
 
-const SYSTEM_PROMPT = `Your name is Vaani. You are a helpful, fast, and real-time voice assistant. 
-Your answers should be concise and conversational. 
-If you need current or external information, use the 'search_web' tool IMMEDIATELY. 
-DO NOT ask for permission to search and DO NOT tell the user you are about to search. Just provide the answer using the tool results.
-Always speak in a way that is easy to listen to (avoid markdown tables or long lists).`;
+const getSystemPrompt = () => `Your name is Vaani. You are a helpful, fast, and real-time voice assistant.
+Current Date: ${new Date().toLocaleDateString()}
+Your answers should be concise and conversational.
+If the user asks about ANY current events, news, sports results (like T20 World Cup), or specific factual data, you MUST use the 'search_web' tool.
+Even if you think you know the answer, use the search tool to verify.
+IMPORTANT:
+1. NEVER output the raw tool call JSON or "function=search_web" text in your final response.
+2. DO NOT say "I will search for that". Just do it silently.
+3. If you receive tool results, summarize them naturally in 1-2 sentences.
+4. Always speak in a way that is easy to listen to (avoid markdown tables or long lists).`;
 
 const responseCache = new Map();
 
@@ -58,7 +63,7 @@ export const getLLMResponse = async (messages, signal) => {
     try {
         const completion = await groq.chat.completions.create({
             messages: [
-                { role: 'system', content: SYSTEM_PROMPT },
+                { role: 'system', content: getSystemPrompt() },
                 ...messages
             ],
             model: "llama-3.1-8b-instant",
@@ -94,6 +99,48 @@ export const getLLMResponse = async (messages, signal) => {
         }
 
 
+        const textToolMatch = msg.content?.match(/<function=(\w+)>(.*?)<\/function>/s);
+        if (textToolMatch) {
+            const fnName = textToolMatch[1];
+            const argsJson = textToolMatch[2];
+
+            if (fnName === 'search_web') {
+                logger.warn({ content: msg.content }, 'Intercepted hallucinated text tool call');
+                try {
+                    const args = JSON.parse(argsJson);
+                    const searchResult = await searchWeb(args.query);
+
+                    // Fabricate a proper tool call sequence to recover gracefully
+                    const fakeToolCallId = "call_" + Math.random().toString(36).substr(2, 9);
+
+                    const assistantMsg = {
+                        role: 'assistant',
+                        content: null, // We discard the "Let me try..." text
+                        tool_calls: [{
+                            id: fakeToolCallId,
+                            type: 'function',
+                            function: { name: 'search_web', arguments: argsJson }
+                        }]
+                    };
+
+                    const newMessages = [
+                        ...messages,
+                        assistantMsg,
+                        {
+                            role: 'tool',
+                            tool_call_id: fakeToolCallId,
+                            content: JSON.stringify(searchResult)
+                        }
+                    ];
+
+                    return await getLLMResponse(newMessages, signal);
+
+                } catch (e) {
+                    logger.error({ err: e }, 'Failed to parse text tool call');
+                }
+            }
+        }
+
         if (lastUserMessage && msg.content) {
             responseCache.set(lastUserMessage, msg.content);
         }
@@ -108,7 +155,7 @@ export const getLLMResponse = async (messages, signal) => {
         logger.warn({ err: error }, 'Groq Primary model failed, attempting fallback to Llama 8b...');
         try {
             const fallback = await groq.chat.completions.create({
-                messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
+                messages: [{ role: 'system', content: getSystemPrompt() }, ...messages],
                 model: "llama3-8b-8192",
                 max_tokens: 512,
             }, { signal });
@@ -128,7 +175,7 @@ export const streamLLMResponse = async (messages, onToken) => {
     try {
         const stream = await groq.chat.completions.create({
             messages: [
-                { role: 'system', content: SYSTEM_PROMPT },
+                { role: 'system', content: getSystemPrompt() },
                 ...messages
             ],
             model: "llama3-70b-8192",

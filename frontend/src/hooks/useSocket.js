@@ -37,11 +37,13 @@ export const useSocket = () => {
             setSessionId(sessionId);
             localStorage.setItem('voice_agent_session_id', sessionId);
             if (history && history.length > 0) {
-                setMessages(history.map(m => ({
-                    role: m.role,
-                    content: m.content,
-                    isPartial: false
-                })));
+                setMessages(history
+                    .filter(m => m.role !== 'tool')
+                    .map(m => ({
+                        role: m.role,
+                        content: m.content,
+                        isPartial: false
+                    })));
             }
             console.log('Session initialized:', sessionId, 'History size:', history?.length || 0);
         });
@@ -57,14 +59,19 @@ export const useSocket = () => {
         });
 
         s.on('transcript:final', ({ text }) => {
+            const cleanText = text.replace(/<function=.*?<\/function>/gs, '').trim();
+            if (!cleanText) return;
+
             setMessages(prev => {
                 const filtered = prev.filter(m => !(m.role === 'user' && m.isPartial));
-                return [...filtered, { role: 'user', content: text, isPartial: false }];
+                return [...filtered, { role: 'user', content: cleanText, isPartial: false }];
             });
         });
 
         s.on('assistant:text', ({ text }) => {
-            setMessages(prev => [...prev, { role: 'assistant', content: text }]);
+            const cleanText = text.replace(/<function=.*?<\/function>/gs, '').trim();
+            if (!cleanText) return;
+            setMessages(prev => [...prev, { role: 'assistant', content: cleanText }]);
         });
 
         s.on('assistant:audio', (payload) => {
