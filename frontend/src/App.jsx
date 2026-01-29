@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Activity, Terminal, Zap, Clock, Cpu, MessageSquare } from 'lucide-react';
+import { Mic, MicOff, Activity, Terminal, Zap, Clock, Cpu, MessageSquare, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSocket } from './hooks/useSocket';
 import { useAudioRecorder } from './hooks/useAudioRecorder';
@@ -103,7 +103,7 @@ const Orb = ({ state }) => {
 };
 
 function App() {
-    const { socket, isConnected, messages, metrics, sessionId } = useSocket();
+    const { socket, isConnected, messages, metrics, sessionId, clearMessages } = useSocket();
     const { isRecording, startRecording, stopRecording } = useAudioRecorder(socket);
     const { isPlaying: isSpeaking } = useAudioPlayer(socket);
     const [showMetrics, setShowMetrics] = useState(false);
@@ -139,6 +139,14 @@ function App() {
                     </h1>
                 </div>
                 <div className="flex items-center gap-2 md:gap-4 text-[10px] md:text-xs font-mono">
+                    <button
+                        onClick={clearMessages}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/5 border border-white/5 backdrop-blur-md text-slate-400 hover:text-red-400 transition-colors"
+                        title="Clear view"
+                    >
+                        <Trash2 size={14} />
+                        <span className="hidden sm:inline">CLEAR</span>
+                    </button>
                     <div className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-3 py-1 md:py-1.5 rounded-full bg-white/5 border border-white/5 backdrop-blur-md">
                         <div className={`h-1.5 w-1.5 md:h-2 md:w-2 rounded-full ${isConnected ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-red-500 animate-pulse'}`} />
                         <span className="text-slate-400">{isConnected ? 'ONLINE' : 'OFFLINE'}</span>

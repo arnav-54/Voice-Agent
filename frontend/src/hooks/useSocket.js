@@ -83,5 +83,7 @@ export const useSocket = () => {
         };
     }, []);
 
-    return { socket, isConnected, messages, metrics, sessionId };
+    const clearMessages = () => setMessages([]);
+
+    return { socket, isConnected, messages, metrics, sessionId, clearMessages };
 };
