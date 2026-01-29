@@ -19,14 +19,14 @@ export class AudioProcessor {
 
     suppressNoise(float32Array) {
         const output = new Float32Array(float32Array.length);
-        const alpha = 0.1;
+        const alpha = 0.8;
         let lastOut = 0;
 
         for (let i = 0; i < float32Array.length; i++) {
             let sample = float32Array[i];
 
 
-            if (Math.abs(sample) < 0.005) {
+            if (Math.abs(sample) < 0.001) {
                 sample = 0;
             }
 

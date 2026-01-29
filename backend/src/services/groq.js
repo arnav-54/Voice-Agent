@@ -1,5 +1,6 @@
 import Groq from 'groq-sdk';
 import { searchWeb } from './tavily.js';
+import { calculateSimilarity } from './similarity.js';
 import logger from '../utils/logger.js';
 
 let groq = null;
@@ -25,9 +26,16 @@ export const getLLMResponse = async (messages, signal) => {
 
 
     const lastUserMessage = messages[messages.length - 1]?.content;
-    if (lastUserMessage && responseCache.has(lastUserMessage)) {
-        logger.info({ query: lastUserMessage }, 'Cache hit for LLM response');
-        return responseCache.get(lastUserMessage);
+
+    if (lastUserMessage) {
+        // Semantic Cache Check
+        for (const [cachedQuery, cachedResponse] of responseCache.entries()) {
+            const similarity = calculateSimilarity(lastUserMessage, cachedQuery);
+            if (similarity > 0.85) { // 85% similarity threshold
+                logger.info({ query: lastUserMessage, match: cachedQuery, similarity: similarity.toFixed(2) }, 'Semantic Cache Hit');
+                return cachedResponse;
+            }
+        }
     }
 
     const tools = [

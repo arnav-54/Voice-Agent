@@ -83,7 +83,10 @@ export const useSocket = () => {
         };
     }, []);
 
-    const clearMessages = () => setMessages([]);
+    const clearMessages = () => {
+        if (socket) socket.emit('session:clear');
+        setMessages([]);
+    };
 
     return { socket, isConnected, messages, metrics, sessionId, clearMessages };
 };

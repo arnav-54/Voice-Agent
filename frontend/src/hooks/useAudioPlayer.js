@@ -36,9 +36,8 @@ export const useAudioPlayer = (socket) => {
 
         return () => {
             stopAll();
-            if (audioContextRef.current) {
-                audioContextRef.current.close();
-            }
+            // Do not close the context here, as it might be needed if component remounts immediately
+            // or if we want to reuse the same context.
         };
     }, [socket]);
 
@@ -50,6 +49,14 @@ export const useAudioPlayer = (socket) => {
         setIsPlaying(true);
 
         const buffer = audioQueueRef.current.shift();
+
+        if (ctx.state === 'closed') {
+            // Try to re-init or just abort
+            audioContextRef.current = null;
+            initContext();
+            return;
+        }
+
         const source = ctx.createBufferSource();
         source.buffer = buffer;
         source.connect(ctx.destination);

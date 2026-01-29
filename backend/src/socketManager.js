@@ -2,7 +2,7 @@ import { Server } from 'socket.io';
 import { AudioProcessor } from './audio/processor.js';
 import { createSttStream, synthesizeAudio } from './services/deepgram.js';
 import { getLLMResponse } from './services/groq.js';
-import { saveMessage, getSessionHistory } from './db/mongo.js';
+import { saveMessage, getSessionHistory, clearSessionView } from './db/mongo.js';
 import { analyzeAudioQuality } from './services/analysis.js';
 import { turnPerformance } from './utils/performance.js';
 import { config } from './config.js';
@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { LiveTranscriptionEvents } from '@deepgram/sdk';
 
 const sessions = new Map();
+import { isTurnComplete } from './services/turnDetection.js';
 
 
 function initializeStt(session, socket) {
@@ -34,7 +35,7 @@ function initializeStt(session, socket) {
             logger.info({ transcript, isFinal, sessionId: session.id }, 'STT Transcript received');
 
 
-            if (session.isAssistantSpeaking && transcript.trim().length > 2) {
+            if (session.isAssistantSpeaking && transcript.trim().length > 0) {
                 logger.info({ sessionId: session.id, transcript }, 'Barge-in detected');
                 session.currentTurnId++;
                 session.isAssistantSpeaking = false;
@@ -45,10 +46,19 @@ function initializeStt(session, socket) {
                 socket.emit('barge_in');
             }
 
+
+
             socket.emit(isFinal ? 'transcript:final' : 'transcript:partial', { text: transcript });
 
             if (isFinal) {
-                handleUserTurn(socket, session, transcript);
+                // Advanced Turn Detection: Is the sentence actually complete?
+                if (isTurnComplete(transcript)) {
+                    handleUserTurn(socket, session, transcript);
+                } else {
+                    logger.info({ transcript }, 'Turn Detection: Sentence incomplete, waiting for more...');
+                    // Treat as partial event though VAD said final
+                    socket.emit('transcript:partial', { text: transcript });
+                }
             }
         }
     });
@@ -74,7 +84,12 @@ function initializeStt(session, socket) {
 export const setupSocketIO = (server) => {
     const io = new Server(server, {
         cors: {
-            origin: process.env.FRONTEND_ORIGIN || "*",
+            origin: [
+                process.env.FRONTEND_ORIGIN,
+                "http://localhost:5173",
+                "http://localhost:5174",
+                "http://localhost:5175"
+            ].filter(Boolean),
             methods: ["GET", "POST"]
         }
     });
@@ -85,7 +100,7 @@ export const setupSocketIO = (server) => {
 
         if (sessionId && sessionId !== 'undefined' && sessionId !== 'null') {
             logger.info({ sessionId }, 'Client attempting to resume session');
-            history = await getSessionHistory(sessionId);
+            history = await getSessionHistory(sessionId, true);
         } else {
             sessionId = uuidv4();
             logger.info({ socketId: socket.id, sessionId }, 'New client connected');
@@ -163,6 +178,11 @@ export const setupSocketIO = (server) => {
         socket.on('context:update', ({ context }) => {
             logger.info({ sessionId, context }, 'Context updated via socket');
             session.context = context;
+        });
+
+        socket.on('session:clear', async () => {
+            logger.info({ sessionId }, 'Clearing session view');
+            await clearSessionView(sessionId);
         });
 
         socket.on('disconnect', () => {

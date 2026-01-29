@@ -11,7 +11,8 @@ const sessionSchema = new mongoose.Schema({
     sessionId: { type: String, required: true, unique: true },
     messages: [messageSchema],
     createdAt: { type: Date, default: Date.now },
-    updatedAt: { type: Date, default: Date.now }
+    updatedAt: { type: Date, default: Date.now },
+    viewClearedAt: { type: Date, default: null }
 });
 
 const Session = mongoose.model('Session', sessionSchema);
@@ -46,13 +47,30 @@ export const saveMessage = async (sessionId, role, content) => {
     }
 };
 
-export const getSessionHistory = async (sessionId) => {
+export const getSessionHistory = async (sessionId, onlyVisible = false) => {
     if (mongoose.connection.readyState !== 1) return [];
     try {
         const session = await Session.findOne({ sessionId });
-        return session ? session.messages : [];
+        if (!session) return [];
+
+        if (onlyVisible && session.viewClearedAt) {
+            return session.messages.filter(m => m.timestamp > session.viewClearedAt);
+        }
+        return session.messages;
     } catch (error) {
         logger.error({ err: error, sessionId }, 'Failed to get session history');
         return [];
+    }
+};
+
+export const clearSessionView = async (sessionId) => {
+    if (mongoose.connection.readyState !== 1) return;
+    try {
+        await Session.findOneAndUpdate(
+            { sessionId },
+            { $set: { viewClearedAt: new Date() } }
+        );
+    } catch (error) {
+        logger.error({ err: error, sessionId }, 'Failed to clear session view');
     }
 };
