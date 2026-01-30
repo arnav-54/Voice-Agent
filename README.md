@@ -8,7 +8,7 @@ A high-performance, low-latency voice agent built with **React (Vite)**, **Node.
 
 ## 🎥 Demo Video
 
-> **[Click here to watch the Demo Video](#)** *(Insert Link Here)*
+> **[Click here to watch the Demo Video](#)** *(https://drive.google.com/file/d/1cj6tRwEw8toioywntKpYOxzUYFXF7NxM/view)*
 
 *The video demonstrates full conversation flow, barge-in capabilities, web search integration, and the real-time observability dashboard.*
 
